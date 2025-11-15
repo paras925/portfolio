@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Paras Cloud Storage</title>
+
+    <!-- Supabase Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        body {
+            font-family: Arial;
+            background: #eef3ff;
+            display: flex;
+            justify-content: center;
+            padding: 40px;
+        }
+        .box {
+            width: 420px;
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 0 15px #0003;
+        }
+        input, button {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
+        button {
+            background: #0062ff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover { background: #003cba; }
+
+        #fileList div {
+            background: #f4f4f4;
+            padding: 10px;
+            margin: 6px 0;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+
+<div class="box">
+
+    <h2 style="text-align:center;">Paras Cloud Storage</h2>
+
+    <!-- LOGIN -->
+    <div id="authBox">
+        <input type="email" id="email" placeholder="Email">
+        <input type="password" id="password" placeholder="Password">
+
+        <button onclick="signup()">Signup</button>
+        <button onclick="login()">Login</button>
+    </div>
+
+    <!-- CLOUD APP -->
+    <div id="appBox" style="display:none;">
+        <button onclick="logout()">Logout</button>
+
+        <h3>Upload File</h3>
+        <input type="file" id="fileInput">
+        <button onclick="uploadFile()">Upload</button>
+
+        <h3>Your Files</h3>
+        <div id="fileList"></div>
+    </div>
+
+</div>
+
+
+<script>
+    // YOUR SUPABASE SETTINGS -------------------------
+    const SUPABASE_URL = "https://dlnfuwhajysmzdpfjpuh.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsbmZ1d2hhanlzbXpkcGZqcHVoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNTMwMjgsImV4cCI6MjA3ODcyOTAyOH0.H7DH7Jpi2s6ZE9psGZSNZ8ShAsE3Z-D9_3rf_l2qcs0";
+
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // SIGNUP -------------------------
+    async function signup() {
+        let email = document.getElementById("email").value;
+        let password = document.getElementById("password").value;
+
+        let { error } = await client.auth.signUp({ email, password });
+
+        if (error) alert(error.message);
+        else alert("Signup successful! Please login.");
+    }
+
+    // LOGIN -------------------------
+    async function login() {
+        let email = document.getElementById("email").value;
+        let password = document.getElementById("password").value;
+
+        let { data, error } = await client.auth.signInWithPassword({
+            email, password
+        });
+
+        if (error) return alert(error.message);
+
+        document.getElementById("authBox").style.display = "none";
+        document.getElementById("appBox").style.display = "block";
+
+        loadFiles();
+    }
+
+    // LOGOUT -------------------------
+    async function logout() {
+        await client.auth.signOut();
+        location.reload();
+    }
+
+    // UPLOAD FILE -------------------------
+    async function uploadFile() {
+        const file = document.getElementById("fileInput").files[0];
+        if (!file) return alert("Select a file first!");
+
+        const { data: userInfo } = await client.auth.getUser();
+        const userId = userInfo.user.id;
+
+        const filePath = `${userId}/${file.name}`;
+
+        let { error } = await client
+            .storage
+            .from("storeroom")
+            .upload(filePath, file, { upsert: true });
+
+        if (error) alert(error.message);
+        else {
+            alert("Uploaded!");
+            loadFiles();
+        }
+    }
+
+    // LIST FILES -------------------------
+    async function loadFiles() {
+        const { data: userInfo } = await client.auth.getUser();
+        const userId = userInfo.user.id;
+
+        let { data, error } = await client
+            .storage
+            .from("storeroom")
+            .list(userId + "/", { limit: 100 });
+
+        const list = document.getElementById("fileList");
+        list.innerHTML = "";
+
+        if (error) return;
+
+        data.forEach(file => {
+            let box = document.createElement("div");
+            box.innerHTML = `
+                <span>${file.name}</span>
+                <span>
+                    <button onclick="downloadFile('${userId}/${file.name}')">Download</button>
+                    <button onclick="deleteFile('${userId}/${file.name}')">Delete</button>
+                </span>
+            `;
+            list.appendChild(box);
+        });
+    }
+
+    // DOWNLOAD -------------------------
+    async function downloadFile(path) {
+        let { data } = client.storage.from("storeroom").getPublicUrl(path);
+        window.open(data.publicUrl, "_blank");
+    }
+
+    // DELETE -------------------------
+    async function deleteFile(path) {
+        let { error } = await client.storage.from("storeroom").remove([path]);
+
+        if (error) alert(error.message);
+        else {
+            alert("Deleted");
+            loadFiles();
+        }
+    }
+</script>
+
+</body>
+</html>
